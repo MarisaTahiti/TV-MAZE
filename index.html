@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Show Finder</title>
+  <style>
+    body { font-family: sans-serif; max-width: 1000px; margin: auto; padding: 20px; background: #f5f4fa; color: #1d1b2e; }
+    h1 { margin-bottom: 4px; }
+    nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 20px; }
+    nav button { padding: 10px 18px; border: 0; border-radius: 8px; background: #ddd; cursor: pointer; font-size: 1rem; }
+    nav button.active { background: #3b2fd6; color: white; }
+    .tools { display: none; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tools.visible { display: flex; }
+    .tools input { flex: 1; min-width: 200px; padding: 12px; font-size: 1rem; border: 2px solid #ccc; border-radius: 8px; }
+    .tools select, .tools button { padding: 12px 16px; font-size: 1rem; border-radius: 8px; border: 2px solid #ccc; background: white; cursor: pointer; }
+    .tools button { background: #3b2fd6; color: white; border: 0; }
+    #message { color: #555; font-size: 1.05rem; }
+    #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
+    .card { background: white; border-radius: 10px; overflow: hidden; border: 1px solid #ddd; cursor: pointer; position: relative; }
+    .card:hover { border-color: #3b2fd6; }
+    .card img { width: 100%; display: block; aspect-ratio: 2 / 3; object-fit: cover; background: #ddd; }
+    .card h3 { font-size: 1rem; margin: 8px; }
+    .card p { margin: 0 8px 10px; color: #666; font-size: 0.9rem; }
+    .heart { position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.9); font-size: 1.3rem; cursor: pointer; }
+    .timetable-mode { display: block !important; }
+    .hour-row { display: flex; gap: 12px; border-top: 1px solid #d8d5e6; padding: 8px 0; min-height: 34px; }
+    .hour-row.empty { min-height: 22px; padding: 2px 0; opacity: 0.6; }
+    .hour-label { flex: 0 0 64px; font-weight: bold; color: #3b2fd6; padding-top: 6px; }
+    .slots { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+    .slot { display: flex; gap: 8px; align-items: center; background: white; border: 1px solid #ddd; border-left: 4px solid #3b2fd6; border-radius: 8px; padding: 6px 10px 6px 6px; cursor: pointer; width: 230px; font-size: 0.9rem; }
+    .slot:hover { border-color: #3b2fd6; background: #f0eeff; }
+    .slot img { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; background: #ddd; flex: 0 0 40px; }
+    .slot small { color: #666; }
+    .week { display: flex; gap: 6px; margin: 8px 0; }
+    .week .day { flex: 1; text-align: center; padding: 8px 0; border-radius: 8px; background: #eee; color: #888; font-size: 0.85rem; }
+    .week .day.on { background: #3b2fd6; color: white; font-weight: bold; }
+    .upcoming { list-style: none; padding: 0; margin: 8px 0; }
+    .upcoming li { background: #f0eeff; border-left: 4px solid #3b2fd6; border-radius: 6px; padding: 6px 10px; margin-bottom: 6px; font-size: 0.92rem; }
+    dialog { border: 0; border-radius: 14px; padding: 0; width: min(760px, 94vw); max-height: 90vh; }
+    dialog::backdrop { background: rgba(0,0,0,0.6); }
+    .detail { display: grid; grid-template-columns: 200px 1fr; gap: 20px; padding: 22px; }
+    .detail img.poster { width: 100%; border-radius: 10px; }
+    .detail h2 { margin: 0 0 6px; }
+    .tag { display: inline-block; background: #eee; border-radius: 99px; padding: 3px 12px; margin: 0 6px 6px 0; font-size: 0.85rem; }
+    .cast { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+    .cast div { flex: 0 0 72px; font-size: 0.75rem; text-align: center; }
+    .cast img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: #ddd; }
+    .episodes { padding-left: 18px; }
+    .row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .row button { padding: 10px 16px; border-radius: 8px; border: 2px solid #3b2fd6; background: white; color: #3b2fd6; font-size: 1rem; cursor: pointer; }
+    @media (max-width: 600px) { .detail { grid-template-columns: 1fr; } .detail img.poster { max-width: 200px; } }
+  </style>
+</head>
+<body>
+  <h1>Show Finder</h1>
+  <p>Discover TV shows, see their details and save your favorites.</p>
+
+  <!-- TABS -->
+  <nav>
+    <button data-tab="home" class="active">Top shows</button>
+    <button data-tab="search">Search</button>
+    <button data-tab="schedule">Today on TV</button>
+    <button data-tab="favorites">Favorites</button>
+  </nav>
+
+  <!-- Search box (only visible on the Search tab) -->
+  <form class="tools" id="tools-search">
+    <input id="q" type="search" placeholder="Type a show name, e.g. Friends">
+    <button type="submit">Search</button>
+  </form>
+
+  <!-- Country choice (only visible on the Today on TV tab) -->
+  <div class="tools" id="tools-schedule">
+    <label for="date">Day:</label>
+    <input type="date" id="date">
+    <label for="country">Country:</label>
+    <select id="country">
+      <option value="US">United States</option>
+      <option value="GB">United Kingdom</option>
+      <option value="FR">France</option>
+      <option value="CA">Canada</option>
+      <option value="AU">Australia</option>
+    </select>
+  </div>
+
+  <p id="message"></p>
+  <div id="grid"></div>
+  <dialog id="modal"></dialog>
+
+  <script>
+    const API = "https://api.tvmaze.com";
+    const grid = document.getElementById("grid");
+    const message = document.getElementById("message");
+    const modal = document.getElementById("modal");
+
+    let currentTab = "home";
+    let shownShows = [];   // the shows currently on screen
+
+    // ---------- SMALL HELPERS ----------
+
+    // Make text safe before putting it on the page
+    function esc(text) {
+      const d = document.createElement("div");
+      d.textContent = text == null ? "" : text;
+      return d.innerHTML;
+    }
+
+    // TVMaze summaries contain HTML tags like <p>. This removes them.
+    function stripTags(html) {
+      return new DOMParser().parseFromString(html || "", "text/html").body.textContent;
+    }
+
+    async function getJSON(url) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Request failed");
+      return response.json();
+    }
+
+    // ---------- FAVORITES (saved in your browser) ----------
+
+    function getFavorites() {
+      try { return JSON.parse(localStorage.getItem("favorites")) || []; }
+      catch (e) { return []; }
+    }
+    function isFavorite(id) {
+      return getFavorites().some(s => s.id === id);
+    }
+    function toggleFavorite(show) {
+      let favs = getFavorites();
+      if (favs.some(s => s.id === show.id)) {
+        favs = favs.filter(s => s.id !== show.id);
+      } else {
+        favs.push({ id: show.id, name: show.name, image: show.image, rating: show.rating });
+      }
+      localStorage.setItem("favorites", JSON.stringify(favs));
+    }
+
+    // ---------- SHOW THE CARDS ----------
+
+    function showCards(shows, emptyText) {
+      shownShows = shows;
+      grid.classList.remove("timetable-mode");
+      grid.innerHTML = shows.map(show => `
+        <div class="card" data-id="${show.id}">
+          <button class="heart" data-heart="${show.id}" title="Add or remove from favorites">${isFavorite(show.id) ? "❤️" : "🤍"}</button>
+          <img src="${show.image ? show.image.medium : ""}" alt="">
+          <h3>${esc(show.name)}</h3>
+          ${show._time ? `<p><strong>${esc(show._time)}</strong><br>${esc(show._episode)}</p>` : ""}
+          <p>${show.rating && show.rating.average ? "★ " + show.rating.average : "No rating"}</p>
+        </div>
+      `).join("");
+      message.textContent = shows.length ? "" : emptyText;
+    }
+
+    // ---------- THE 4 TABS ----------
+
+    async function loadTopShows() {
+      message.textContent = "Loading...";
+      try {
+        const shows = await getJSON(API + "/shows?page=0");
+        shows.sort((a, b) => (b.rating.average || 0) - (a.rating.average || 0));
+        showCards(shows.slice(0, 24), "");
+      } catch (e) {
+        message.textContent = "Could not load the shows. Check your internet connection.";
+      }
+    }
+
+    async function searchShows(text) {
+      message.textContent = "Searching...";
+      grid.innerHTML = "";
+      try {
+        const results = await getJSON(API + "/search/shows?q=" + encodeURIComponent(text));
+        showCards(results.map(r => r.show), "No show found. Check the spelling or try another title.");
+      } catch (e) {
+        message.textContent = "Search failed. Check your internet connection.";
+      }
+    }
+
+    function slotHTML(item) {
+      const s = item.show;
+      const number = item.ep.number ? "S" + item.ep.season + "E" + item.ep.number : "Special";
+      return `
+        <div class="slot" data-id="${s.id}" title="${esc(s.name)}">
+          <img src="${s.image ? s.image.medium : ""}" alt="">
+          <div><strong>${esc(item.time || "")}</strong> ${esc(s.name)}<br><small>${number}</small></div>
+        </div>`;
+    }
+
+    async function loadSchedule() {
+      const country = document.getElementById("country").value;
+      const date = document.getElementById("date").value || new Date().toISOString().slice(0, 10);
+      message.textContent = "Loading the timetable...";
+      grid.innerHTML = "";
+      grid.classList.add("timetable-mode");
+      try {
+        const episodes = await getJSON(`${API}/schedule?country=${country}&date=${date}`);
+        const rows = {};      // hour -> list of episodes
+        const unknown = [];   // episodes without a time
+
+        episodes.forEach(ep => {
+          const show = ep.show || (ep._embedded && ep._embedded.show);
+          if (!show) return;
+          const item = { show: show, ep: ep };
+          if (ep.airstamp) {
+            // airstamp is a universal time; the browser converts it to YOUR local time
+            const d = new Date(ep.airstamp);
+            item.time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            item.sort = d.getTime();
+            const hour = d.getHours();
+            if (!rows[hour]) rows[hour] = [];
+            rows[hour].push(item);
+          } else {
+            unknown.push(item);
+          }
+        });
+
+        const hours = Object.keys(rows).map(Number);
+        if (!hours.length && !unknown.length) {
+          grid.classList.remove("timetable-mode");
+          message.textContent = "Nothing found for this day and country. Try another one.";
+          return;
+        }
+
+        let html = "";
+        if (hours.length) {
+          for (let h = Math.min(...hours); h <= Math.max(...hours); h++) {
+            const items = (rows[h] || []).sort((a, b) => a.sort - b.sort);
+            html += `
+              <div class="hour-row ${items.length ? "" : "empty"}">
+                <div class="hour-label">${String(h).padStart(2, "0")}:00</div>
+                <div class="slots">${items.map(slotHTML).join("")}</div>
+              </div>`;
+          }
+        }
+        if (unknown.length) {
+          html += `
+            <div class="hour-row">
+              <div class="hour-label">Time?</div>
+              <div class="slots">${unknown.map(slotHTML).join("")}</div>
+            </div>`;
+        }
+        grid.innerHTML = html;
+        message.textContent = "Click a show to see its details.";
+      } catch (e) {
+        grid.classList.remove("timetable-mode");
+        message.textContent = "Could not load the schedule. Try again.";
+      }
+    }
+
+    function loadFavorites() {
+      showCards(getFavorites(), "No favorites yet. Click the heart on a show to save it here.");
+    }
+
+    function openTab(name) {
+      currentTab = name;
+      document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+      document.getElementById("tools-search").classList.toggle("visible", name === "search");
+      document.getElementById("tools-schedule").classList.toggle("visible", name === "schedule");
+      grid.innerHTML = "";
+      grid.classList.remove("timetable-mode");
+      message.textContent = "";
+      if (name === "schedule" && !document.getElementById("date").value) {
+        document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+      }
+
+      if (name === "home") loadTopShows();
+      if (name === "search") message.textContent = "Type a show name above and press Search.";
+      if (name === "schedule") loadSchedule();
+      if (name === "favorites") loadFavorites();
+    }
+
+    // ---------- DETAIL WINDOW ----------
+
+    async function openDetail(id) {
+      try {
+        const s = await getJSON(`${API}/shows/${id}?embed[]=cast&embed[]=episodes`);
+        const cast = (s._embedded.cast || []).slice(0, 10);
+        const episodes = (s._embedded.episodes || []).slice(-5).reverse();
+        const network = s.network ? s.network.name : (s.webChannel ? s.webChannel.name : "Unknown");
+
+        // --- Schedule of this show ---
+        const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const airDays = (s.schedule && s.schedule.days) || [];
+        const airTime = s.schedule && s.schedule.time ? " at " + s.schedule.time + " (network time)" : "";
+        const weekText = airDays.length ? "Usually airs on " + airDays.join(", ") + airTime : "No fixed weekly schedule.";
+        const now = Date.now();
+        const upcoming = (s._embedded.episodes || [])
+          .filter(e => e.airstamp && new Date(e.airstamp).getTime() > now)
+          .slice(0, 5);
+
+        modal.innerHTML = `
+          <div class="detail">
+            <div><img class="poster" src="${s.image ? s.image.original : ""}" alt=""></div>
+            <div>
+              <h2>${esc(s.name)}</h2>
+              <p>${s.rating && s.rating.average ? "★ " + s.rating.average + " / 10" : "No rating"}
+                 · ${esc(s.status)} · ${esc(network)}<br>First aired: ${esc(s.premiered || "unknown")}</p>
+              <div>${(s.genres || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div>
+              <p>${esc(stripTags(s.summary)) || "No description available."}</p>
+              <h3>Schedule</h3>
+              <div class="week">${weekDays.map(d => `<div class="day ${airDays.includes(d) ? "on" : ""}">${d.slice(0, 3)}</div>`).join("")}</div>
+              <p>${esc(weekText)}</p>
+              ${upcoming.length ? `<strong>Next episodes (your local time)</strong><ul class="upcoming">${upcoming.map(e => `
+                <li>${esc(new Date(e.airstamp).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }))}
+                at ${esc(new Date(e.airstamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}
+                · S${e.season}E${e.number || "?"} ${esc(e.name)}</li>`).join("")}</ul>`
+                : `<p><em>No upcoming episode announced (status: ${esc(s.status)}).</em></p>`}
+              ${cast.length ? `<h3>Main cast</h3><div class="cast">${cast.map(c => `
+                <div><img src="${c.person.image ? c.person.image.medium : ""}" alt="">
+                <strong>${esc(c.person.name)}</strong><br>${esc(c.character.name)}</div>`).join("")}</div>` : ""}
+              ${episodes.length ? `<h3>Latest episodes</h3><ul class="episodes">${episodes.map(e => `
+                <li>S${e.season}E${e.number}: ${esc(e.name)} (${esc(e.airdate)})</li>`).join("")}</ul>` : ""}
+              <div class="row">
+                <button id="fav-btn">${isFavorite(s.id) ? "❤️ Remove from favorites" : "🤍 Add to favorites"}</button>
+                <button id="close-btn">Close</button>
+              </div>
+            </div>
+          </div>`;
+        modal.showModal();
+
+        document.getElementById("close-btn").addEventListener("click", () => modal.close());
+        document.getElementById("fav-btn").addEventListener("click", () => {
+          toggleFavorite(s);
+          document.getElementById("fav-btn").textContent = isFavorite(s.id) ? "❤️ Remove from favorites" : "🤍 Add to favorites";
+          if (currentTab === "favorites") loadFavorites();
+          else if (currentTab !== "schedule") showCards(shownShows, "");
+        });
+      } catch (e) {
+        message.textContent = "Could not load this show. Please try again.";
+      }
+    }
+
+    // ---------- CLICKS ----------
+
+    // Tabs
+    document.querySelectorAll("nav button").forEach(b => {
+      b.addEventListener("click", () => openTab(b.dataset.tab));
+    });
+
+    // Search form
+    document.getElementById("tools-search").addEventListener("submit", e => {
+      e.preventDefault();
+      const text = document.getElementById("q").value.trim();
+      if (text) searchShows(text);
+    });
+
+    // Country menu
+    document.getElementById("country").addEventListener("change", loadSchedule);
+    document.getElementById("date").addEventListener("change", loadSchedule);
+
+    // Clicks on cards: the heart button or the card itself
+    grid.addEventListener("click", e => {
+      const heart = e.target.closest("[data-heart]");
+      if (heart) {
+        const id = Number(heart.dataset.heart);
+        const show = shownShows.find(s => s.id === id);
+        toggleFavorite(show);
+        if (currentTab === "favorites") loadFavorites();
+        else showCards(shownShows, "");
+        return;
+      }
+      const card = e.target.closest("[data-id]");
+      if (card) openDetail(card.dataset.id);
+    });
+
+    // Click outside the detail window closes it
+    modal.addEventListener("click", e => { if (e.target === modal) modal.close(); });
+
+    // Start on the first tab
+    openTab("home");
+  </script>
+</body>
+</html>
